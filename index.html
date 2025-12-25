@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>StudySync Pro - Ultimate</title>
+    
+    <!-- LIBRARIES -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --primary: #6366f1;
+            --bg-dark: #0f172a;
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --glass-bg: rgba(30, 41, 59, 0.85);
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-dark);
+            color: white;
+            overflow-x: hidden;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        #bg-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; opacity: 0.6; }
+
+        /* Advanced Glassmorphism */
+        .glass-panel {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+        }
+
+        .glass-input {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--glass-border);
+            color: white;
+            transition: all 0.3s ease;
+        }
+        .glass-input:focus { outline: none; border-color: var(--primary); background: rgba(0, 0, 0, 0.5); }
+
+        .text-gradient {
+            background: linear-gradient(135deg, #818cf8 0%, #c084fc 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Animations */
+        .fade-in-up { animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; opacity: 0; transform: translateY(20px); }
+        @keyframes fadeInUp { to { opacity: 1; transform: translateY(0); } }
+
+        /* Toast Notification */
+        #toast-container { position: fixed; top: 20px; right: 20px; z-index: 100; display: flex; flex-direction: column; gap: 10px; }
+        .toast {
+            background: rgba(30, 41, 59, 0.95);
+            border-left: 4px solid var(--primary);
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            transform: translateX(120%);
+            transition: transform 0.3s ease-out;
+            display: flex; align-items: center; gap: 12px;
+            min-width: 300px;
+        }
+        .toast.show { transform: translateX(0); }
+        .toast.success { border-color: #10b981; }
+        .toast.error { border-color: #ef4444; }
+        .toast.info { border-color: #3b82f6; }
+
+        /* Heatmap Grid */
+        .heatmap-grid {
+            display: grid;
+            grid-template-rows: repeat(7, 1fr);
+            grid-auto-flow: column;
+            gap: 3px;
+            height: 100px;
+        }
+        .heatmap-cell {
+            width: 10px; height: 10px;
+            border-radius: 2px;
+            background-color: rgba(255,255,255,0.05);
+        }
+        .heatmap-cell.l1 { background-color: #312e81; }
+        .heatmap-cell.l2 { background-color: #4338ca; }
+        .heatmap-cell.l3 { background-color: #6366f1; }
+        .heatmap-cell.l4 { background-color: #a5b4fc; }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 10px; }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <canvas id="bg-canvas"></canvas>
+    <div id="toast-container"></div>
+
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen" class="fixed inset-0 z-50 flex flex-col items-center justify-center p-6">
+        <div class="glass-panel p-8 rounded-3xl w-full max-w-md text-center border border-white/10 shadow-2xl fade-in-up">
+            <div class="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg">
+                <i class="fas fa-graduation-cap text-3xl text-white"></i>
+            </div>
+            <h1 class="text-3xl font-bold mb-2">Welcome</h1>
+            <p class="text-slate-400 mb-8 text-sm">Your ultimate study companion.</p>
+            <div class="space-y-4 text-left">
+                <input type="text" id="login-fname" class="glass-input w-full p-4 rounded-xl" placeholder="First Name">
+                <input type="text" id="login-lname" class="glass-input w-full p-4 rounded-xl" placeholder="Last Name">
+                <button onclick="App.login()" class="w-full py-4 mt-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all shadow-lg">Get Started</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- APP CONTAINER -->
+    <div id="app-container" class="relative min-h-screen flex flex-col max-w-6xl mx-auto border-x border-white/5 shadow-2xl bg-slate-900/40 hidden">
+        
+        <!-- HEADER -->
+        <header class="sticky top-0 z-40 px-6 py-4 flex justify-between items-center bg-slate-900/90 backdrop-blur-md border-b border-white/5">
+            <div class="flex items-center gap-3 cursor-pointer" onclick="App.renderHome()">
+                <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center shadow-lg">
+                    <i class="fas fa-layer-group text-white"></i>
+                </div>
+                <h1 class="font-bold text-xl tracking-tight text-white">StudySync <span class="text-indigo-400">Pro</span></h1>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="hidden md:flex flex-col items-end">
+                    <span id="header-username" class="text-sm font-bold text-white">User</span>
+                    <span id="streak-counter" class="text-[10px] text-amber-400 font-bold uppercase tracking-wide">🔥 0 Day Streak</span>
+                </div>
+                <button onclick="App.openModal('settings-modal')" class="p-2 text-slate-400 hover:text-white rounded-lg"><i class="fas fa-cog"></i></button>
+                <button onclick="App.logout()" class="p-2 text-slate-400 hover:text-red-400 rounded-lg"><i class="fas fa-sign-out-alt"></i></button>
+            </div>
+        </header>
+
+        <!-- MAIN CONTENT -->
+        <main id="main-content" class="flex-1 p-4 md:p-8 overflow-y-auto pb-32"></main>
+
+        <!-- MINI TIMER -->
+        <div id="mini-timer" class="fixed bottom-24 right-6 z-50 glass-panel p-3 rounded-2xl flex items-center gap-4 hidden border border-white/10 shadow-2xl animate-pulse border-indigo-500/50">
+            <div id="mini-timer-icon" class="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center">
+                <i class="fas fa-clock text-white text-sm"></i>
+            </div>
+            <div>
+                <div class="text-[10px] text-indigo-300 font-bold uppercase" id="mini-timer-label">Focus</div>
+                <div id="mini-timer-display" class="text-lg font-mono font-bold text-white">00:00:00</div>
+            </div>
+            <div class="flex gap-2 ml-2 pl-2 border-l border-white/10">
+                <button id="mini-btn-play" onclick="App.startTimer()" class="hidden text-emerald-400 hover:text-emerald-300"><i class="fas fa-play"></i></button>
+                <button id="mini-btn-pause" onclick="App.pauseTimer()" class="text-amber-400 hover:text-amber-300"><i class="fas fa-pause"></i></button>
+                <button onclick="App.renderDetail(App.activeSubjectId); App.switchTab('timer')" class="text-indigo-300 hover:text-white"><i class="fas fa-expand"></i></button>
+                <button onclick="App.stopTimer()" class="text-red-400 hover:text-red-300"><i class="fas fa-stop"></i></button>
+            </div>
+        </div>
+
+        <!-- FAB -->
+        <div id="fab-container" class="fixed bottom-6 right-6 z-30 md:hidden">
+            <button id="fab-btn" onclick="App.handleFabClick()" class="w-14 h-14 rounded-full bg-indigo-600 text-white shadow-lg flex items-center justify-center text-2xl transition-transform active:scale-95 shadow-indigo-600/40">
+                <i class="fas fa-plus"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- MODALS -->
+    
+    <!-- Add Subject Modal -->
+    <div id="add-subject-modal" class="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="glass-panel w-full max-w-sm rounded-2xl p-6 transform scale-100 transition-all border border-white/10">
+            <h3 class="text-2xl font-bold mb-4">New Subject</h3>
+            <div class="space-y-6">
+                <input type="text" id="inp-subject-name" class="glass-input w-full p-4 rounded-xl text-lg" placeholder="e.g. Physics">
+                <button onclick="App.createSubject()" class="w-full py-4 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold text-white shadow-lg transition-all">Create Track</button>
+                <button onclick="App.closeModal('add-subject-modal')" class="w-full py-2 text-slate-400 hover:text-white text-sm">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal (Backup/Restore) -->
+    <div id="settings-modal" class="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="glass-panel w-full max-w-md rounded-2xl p-6 border border-white/10">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-bold">Settings & Data</h3>
+                <button onclick="App.closeModal('settings-modal')" class="text-gray-400 hover:text-white"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="space-y-4">
+                <div class="p-4 bg-white/5 rounded-xl">
+                    <h4 class="font-bold text-sm mb-2 text-indigo-300">Data Management</h4>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button onclick="App.exportData()" class="py-3 bg-slate-700 hover:bg-slate-600 rounded-xl text-sm font-bold flex items-center justify-center gap-2"><i class="fas fa-download"></i> Backup</button>
+                        <label class="py-3 bg-slate-700 hover:bg-slate-600 rounded-xl text-sm font-bold flex items-center justify-center gap-2 cursor-pointer">
+                            <i class="fas fa-upload"></i> Restore
+                            <input type="file" class="hidden" onchange="App.importData(this)" accept=".json">
+                        </label>
+                    </div>
+                </div>
+                <div class="p-4 bg-white/5 rounded-xl">
+                    <h4 class="font-bold text-sm mb-2 text-red-300">Danger Zone</h4>
+                    <button onclick="App.resetData()" class="w-full py-3 bg-red-500/10 border border-red-500/50 text-red-400 hover:bg-red-500 hover:text-white rounded-xl text-sm font-bold transition-all">
+                        <i class="fas fa-trash-alt mr-2"></i> Factory Reset
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chapter Modal -->
+    <div id="chapter-modal" class="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="glass-panel w-full max-w-md rounded-2xl p-6 h-[80vh] flex flex-col border border-white/10">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-bold">Manage Chapters</h3>
+                <button onclick="App.closeModal('chapter-modal')" class="text-gray-400 hover:text-white"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="mb-4 relative group">
+                <input type="text" id="inp-chapter-name" class="glass-input w-full p-4 pr-12 rounded-xl" placeholder="Type chapter name...">
+                <button onclick="App.addManualChapter()" class="absolute right-2 top-2 bottom-2 w-10 bg-indigo-600 rounded-lg hover:bg-indigo-500 flex items-center justify-center transition-colors"><i class="fas fa-plus text-white"></i></button>
+            </div>
+            <div class="mb-4 p-6 rounded-xl border-2 border-dashed border-slate-700 bg-slate-800/50 hover:border-indigo-500/50 transition-all text-center cursor-pointer" onclick="document.getElementById('ocr-upload').click()">
+                <input type="file" id="ocr-upload" class="hidden" accept="image/*" onchange="App.processOCR(this)">
+                <div class="w-12 h-12 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center mx-auto mb-3"><i class="fas fa-magic"></i></div>
+                <p class="text-sm font-medium text-gray-300">Scan Index with AI</p>
+                <div id="ocr-loading" class="hidden mt-3 text-xs text-indigo-400 font-bold animate-pulse">Analyzing...</div>
+            </div>
+            <div class="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar" id="chapter-edit-list"></div>
+            <button onclick="App.saveChaptersBatch()" class="mt-4 w-full py-4 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold text-white shadow-lg">Save All Changes</button>
+        </div>
+    </div>
+
+    <!-- Status Modal -->
+    <div id="status-modal" class="fixed inset-0 z-[60] bg-black/90 backdrop-blur-md hidden flex items-end sm:items-center justify-center">
+        <div class="glass-panel w-full max-w-sm rounded-t-2xl sm:rounded-2xl p-8 slide-up border border-white/10">
+            <h3 class="text-xl font-bold mb-6 text-center" id="status-modal-title">Progress</h3>
+            <div class="grid grid-cols-3 gap-4">
+                <button onclick="App.updateChapterStatus('bad')" class="flex flex-col items-center p-4 rounded-2xl bg-slate-800 border border-slate-700 hover:border-rose-500 transition-all"><i class="fas fa-times text-rose-500 text-xl mb-2"></i><span class="text-xs font-bold text-gray-400">Start</span></button>
+                <button onclick="App.updateChapterStatus('good')" class="flex flex-col items-center p-4 rounded-2xl bg-slate-800 border border-slate-700 hover:border-amber-500 transition-all"><i class="fas fa-book-open text-amber-500 text-xl mb-2"></i><span class="text-xs font-bold text-gray-400">Learn</span></button>
+                <button onclick="App.updateChapterStatus('excellent')" class="flex flex-col items-center p-4 rounded-2xl bg-slate-800 border border-slate-700 hover:border-emerald-500 transition-all"><i class="fas fa-check text-emerald-500 text-xl mb-2"></i><span class="text-xs font-bold text-gray-400">Done</span></button>
+            </div>
+            <button onclick="App.closeModal('status-modal')" class="mt-6 w-full py-3 text-slate-500 hover:text-white text-sm">Cancel</button>
+        </div>
+    </div>
+
+    <script>
+        // --- ROBUST DATA ENGINE ---
+        const DB_KEY = 'StudySync_Ultimate_v9';
+        const DB = {
+            data: { user: null, subjects: [], chapters: {}, sessions: [], settings: { pomodoro: 25 }, streak: { current: 0, lastLogin: null } },
+            init() {
+                try {
+                    const stored = localStorage.getItem(DB_KEY);
+                    if (stored) {
+                        const parsed = JSON.parse(stored);
+                        this.data = { ...this.data, ...parsed }; // Merge safe defaults
+                        if(!this.data.subjects) this.data.subjects = [];
+                        if(!this.data.sessions) this.data.sessions = [];
+                    }
+                } catch(e) { console.error("DB Corrupt", e); }
+                this.updateStreak();
+                this.save();
+            },
+            save() { try { localStorage.setItem(DB_KEY, JSON.stringify(this.data)); } catch(e){} },
+            
+            setUser(f, l) { this.data.user = { firstName: f, lastName: l }; this.save(); },
+            clearUser() { this.data.user = null; this.save(); },
+
+            updateStreak() {
+                const today = new Date().toISOString().split('T')[0];
+                if(this.data.streak.lastLogin !== today) {
+                    const yesterday = new Date();
+                    yesterday.setDate(yesterday.getDate() - 1);
+                    const yStr = yesterday.toISOString().split('T')[0];
+                    
+                    if(this.data.streak.lastLogin === yStr) this.data.streak.current++;
+                    else if(this.data.streak.lastLogin !== today) this.data.streak.current = 1; // Reset if broken or new
+                    
+                    this.data.streak.lastLogin = today;
+                    this.save();
+                }
+            },
+
+            addSubject(name) {
+                const id = 'sub_' + Date.now();
+                this.data.subjects.push({ id, name, progress: 0 });
+                this.data.chapters[id] = [];
+                this.save();
+            },
+            deleteSubject(id) {
+                this.data.subjects = this.data.subjects.filter(s => s.id !== id);
+                delete this.data.chapters[id];
+                this.data.sessions = this.data.sessions.filter(s => s.subjectId !== id);
+                this.save();
+            },
+            
+            addChapter(subId, name) {
+                const id = 'chap_' + Date.now() + Math.random().toString(16).slice(2);
+                if(!this.data.chapters[subId]) this.data.chapters[subId] = [];
+                this.data.chapters[subId].push({ id, name, status: 'bad' });
+                this.calcProgress(subId);
+            },
+            updateChapter(subId, chapId, status) {
+                const chap = this.data.chapters[subId].find(c => c.id === chapId);
+                if(chap) { 
+                    chap.status = status; 
+                    this.calcProgress(subId); 
+                    if(status === 'excellent') App.triggerConfetti();
+                }
+            },
+            deleteChapter(subId, chapId) {
+                this.data.chapters[subId] = this.data.chapters[subId].filter(c => c.id !== chapId);
+                this.calcProgress(subId);
+                this.save();
+            },
+            calcProgress(subId) {
+                const chaps = this.data.chapters[subId] || [];
+                if(chaps.length === 0) { this.updateSubMeta(subId, 0); return; }
+                let score = 0;
+                chaps.forEach(c => {
+                    if(c.status === 'excellent') score += 100;
+                    else if(c.status === 'good') score += 50;
+                });
+                this.updateSubMeta(subId, Math.round(score / chaps.length));
+            },
+            updateSubMeta(id, prog) {
+                const sub = this.data.subjects.find(s => s.id === id);
+                if(sub) { sub.progress = prog; this.save(); }
+            },
+
+            logSession(subjectId, duration) {
+                const now = new Date();
+                const offset = now.getTimezoneOffset() * 60000;
+                const localISOTime = (new Date(now - offset)).toISOString().slice(0, -1);
+                const dateStr = localISOTime.split('T')[0];
+
+                this.data.sessions.push({
+                    id: 'sess_' + Date.now(),
+                    subjectId, duration,
+                    date: dateStr,
+                    timestamp: now.getTime(),
+                    fullDate: now.toLocaleString()
+                });
+                this.save();
+            },
+            getStats(period, subId = null) {
+                const now = new Date();
+                const offset = now.getTimezoneOffset() * 60000;
+                const todayStr = (new Date(now - offset)).toISOString().split('T')[0];
+                let total = 0;
+
+                this.data.sessions.forEach(s => {
+                    if(subId && s.subjectId !== subId) return;
+                    if(period === 'daily' && s.date === todayStr) total += s.duration;
+                    else if(period === 'weekly') {
+                        const sessDate = new Date(s.date);
+                        const diff = Math.ceil(Math.abs(now - sessDate) / (1000*60*60*24));
+                        if(diff <= 7) total += s.duration;
+                    }
+                    else if(period === 'monthly') {
+                        const sessDate = new Date(s.date);
+                        if(sessDate.getMonth() === now.getMonth() && sessDate.getFullYear() === now.getFullYear()) total += s.duration;
+                    }
+                });
+                return total;
+            },
+            getHistory(subId) {
+                return this.data.sessions.filter(s => s.subjectId === subId).sort((a,b)=>b.timestamp-a.timestamp);
+            }
+        };
+
+        // --- APP CONTROLLER ---
+        const App = {
+            activeSubjectId: null,
+            timerInterval: null,
+            startTime: null,
+            elapsedTime: 0,
+            isTimerRunning: false,
+            currentTab: 'home',
+            pendingChapters: [],
+            pomodoroMode: false,
+            pomodoroTime: 25 * 60, // Default 25 min
+
+            init() {
+                DB.init();
+                setTimeout(() => {
+                    this.checkAuth();
+                    this.renderHeatmap(); // Initial render if auth
+                }, 100);
+            },
+
+            checkAuth() {
+                const loginEl = document.getElementById('login-screen');
+                const appEl = document.getElementById('app-container');
+                if(DB.data.user && DB.data.user.firstName) {
+                    loginEl.classList.add('hidden');
+                    appEl.classList.remove('hidden');
+                    appEl.classList.add('fade-in-up');
+                    document.getElementById('header-username').innerText = DB.data.user.firstName;
+                    document.getElementById('streak-counter').innerText = `🔥 ${DB.data.streak.current} Day Streak`;
+                    this.renderHome();
+                } else {
+                    loginEl.classList.remove('hidden');
+                    appEl.classList.add('hidden');
+                }
+            },
+
+            login() {
+                const f = document.getElementById('login-fname').value;
+                const l = document.getElementById('login-lname').value;
+                if(f && l) { DB.setUser(f, l); this.checkAuth(); }
+                else this.showToast("Please enter your name", "error");
+            },
+            logout() { if(confirm("Sign out? Data stays on device.")) { DB.clearUser(); location.reload(); } },
+
+            // --- UTILITIES ---
+            getGreeting() {
+                const h = new Date().getHours();
+                return h < 12 ? 'Good Morning' : (h < 18 ? 'Good Afternoon' : 'Good Evening');
+            },
+            formatTime(s) {
+                if(s < 60) return s + 's';
+                const h = Math.floor(s/3600);
+                const m = Math.floor((s%3600)/60);
+                return h > 0 ? `${h}h ${m}m` : `${m}m`;
+            },
+            showToast(msg, type = 'info') {
+                const container = document.getElementById('toast-container');
+                const toast = document.createElement('div');
+                toast.className = `toast ${type}`;
+                toast.innerHTML = `<i class="fas fa-${type==='success'?'check-circle':(type==='error'?'exclamation-circle':'info-circle')} text-2xl"></i><span class="font-bold text-sm">${msg}</span>`;
+                container.appendChild(toast);
+                // Trigger reflow
+                void toast.offsetWidth;
+                toast.classList.add('show');
+                if(navigator.vibrate) navigator.vibrate(50);
+                setTimeout(() => {
+                    toast.classList.remove('show');
+                    setTimeout(() => toast.remove(), 300);
+                }, 3000);
+            },
+            triggerConfetti() {
+                confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+                if(navigator.vibrate) navigator.vibrate([100, 50, 100]);
+            },
+            vibrate(pattern) { if(navigator.vibrate) navigator.vibrate(pattern); },
+
+            // --- DATA PORTABILITY ---
+            exportData() {
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(DB.data));
+                const downloadAnchorNode = document.createElement('a');
+                downloadAnchorNode.setAttribute("href", dataStr);
+                downloadAnchorNode.setAttribute("download", "study_backup_" + new Date().toISOString().split('T')[0] + ".json");
+                document.body.appendChild(downloadAnchorNode);
+                downloadAnchorNode.click();
+                downloadAnchorNode.remove();
+                this.showToast("Backup downloaded!", "success");
+            },
+            importData(input) {
+                const file = input.files[0];
+                if(!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const imported = JSON.parse(e.target.result);
+                        if(imported.subjects && imported.sessions) {
+                            DB.data = imported;
+                            DB.save();
+                            this.showToast("Data restored successfully!", "success");
+                            setTimeout(() => location.reload(), 1000);
+                        } else throw new Error("Invalid Format");
+                    } catch(err) { this.showToast("Invalid Backup File", "error"); }
+                };
+                reader.readAsText(file);
+            },
+            resetData() {
+                if(confirm("WARNING: This will wipe ALL data permanently. Continue?")) {
+                    localStorage.removeItem(DB_KEY);
+                    location.reload();
+                }
+            },
+
+            // --- VIEW LOGIC ---
+            handleFabClick() {
+                if(this.view === 'home') this.openModal('add-subject-modal');
+                else this.openModal('chapter-modal');
+            },
+
+            renderHome() {
+                this.view = 'home';
+                this.currentTab = 'home';
+                this.activeSubjectId = null;
+                this.checkMiniPlayer();
+                const container = document.getElementById('main-content');
+                if(!container) return;
+
+                const userName = DB.data.user ? DB.data.user.firstName : 'Student';
+                const subs = DB.data.subjects;
+                const totalChaps = Object.values(DB.data.chapters).flat().length;
+                const dailyTime = DB.getStats('daily');
+                
+                let html = `
+                    <div class="max-w-5xl mx-auto fade-in-up pb-20">
+                        <div class="mb-8">
+                            <h2 class="text-4xl font-bold mb-1">${this.getGreeting()}, <span class="text-gradient">${userName}</span></h2>
+                            <p class="text-slate-400">Ready to crush your goals today?</p>
+                        </div>
+
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 delay-100">
+                            <div class="glass-panel p-4 rounded-2xl"><div class="text-slate-400 text-xs font-bold uppercase mb-1">Subjects</div><div class="text-2xl font-bold text-white">${subs.length}</div></div>
+                            <div class="glass-panel p-4 rounded-2xl"><div class="text-slate-400 text-xs font-bold uppercase mb-1">Chapters</div><div class="text-2xl font-bold text-white">${totalChaps}</div></div>
+                            <div class="glass-panel p-4 rounded-2xl"><div class="text-emerald-400 text-xs font-bold uppercase mb-1">Studied Today</div><div class="text-2xl font-bold text-white">${this.formatTime(dailyTime)}</div></div>
+                            <div class="glass-panel p-4 rounded-2xl"><div class="text-amber-400 text-xs font-bold uppercase mb-1">Streak</div><div class="text-2xl font-bold text-white">${DB.data.streak.current} Days</div></div>
+                        </div>
+
+                        <!-- Heatmap Section -->
+                        <div class="glass-panel p-5 rounded-2xl mb-8 border border-white/5">
+                            <h3 class="text-sm font-bold uppercase text-slate-400 mb-3">Activity Map</h3>
+                            <div id="heatmap-container" class="heatmap-grid overflow-x-auto pb-2 custom-scrollbar"></div>
+                        </div>
+
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-xl font-bold">Your Subjects</h3>
+                            <button onclick="App.openModal('add-subject-modal')" class="bg-indigo-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-500">New</button>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pb-20">
+                `;
+
+                if(subs.length === 0) {
+                    html += `<div class="col-span-full py-16 text-center border border-dashed border-slate-700 rounded-3xl bg-slate-800/30"><button onclick="App.openModal('add-subject-modal')" class="text-indigo-400 font-bold">Create First Subject</button></div>`;
+                } else {
+                    subs.forEach(s => {
+                        const cCount = (DB.data.chapters[s.id]||[]).length;
+                        const barColor = s.progress >= 75 ? 'bg-emerald-500' : (s.progress >= 40 ? 'bg-amber-500' : 'bg-rose-500');
+                        const txtColor = s.progress >= 75 ? 'text-emerald-400' : (s.progress >= 40 ? 'text-amber-400' : 'text-rose-400');
+                        
+                        html += `
+                            <div onclick="App.renderDetail('${s.id}')" class="glass-panel p-6 rounded-2xl cursor-pointer glass-card-hover group relative overflow-hidden">
+                                <div class="flex justify-between items-start mb-6">
+                                    <div class="bg-slate-800 w-10 h-10 rounded-lg flex items-center justify-center text-slate-400 group-hover:text-white group-hover:bg-indigo-600 transition-colors"><i class="fas fa-book"></i></div>
+                                    <button onclick="event.stopPropagation(); App.deleteSubject('${s.id}')" class="text-slate-600 hover:text-red-400 transition-colors z-10 p-2"><i class="fas fa-trash-alt"></i></button>
+                                </div>
+                                <h3 class="font-bold text-lg text-white mb-1 truncate">${s.name}</h3>
+                                <p class="text-xs text-slate-500 mb-4">${cCount} Chapters</p>
+                                <div class="flex items-end justify-between">
+                                    <div class="w-full mr-4"><div class="w-full h-1.5 bg-slate-700 rounded-full overflow-hidden"><div class="h-full ${barColor} transition-all duration-1000" style="width: ${s.progress}%"></div></div></div>
+                                    <span class="text-sm font-bold ${txtColor}">${s.progress}%</span>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+
+                html += `</div></div>`;
+                container.innerHTML = html;
+                setTimeout(() => this.renderHeatmap(), 100);
+            },
+
+            renderHeatmap() {
+                const container = document.getElementById('heatmap-container');
+                if(!container) return;
+                
+                // Generate last 365 days data
+                const today = new Date();
+                const mapData = {};
+                DB.data.sessions.forEach(s => {
+                    if(!mapData[s.date]) mapData[s.date] = 0;
+                    mapData[s.date] += s.duration;
+                });
+
+                let html = '';
+                // 52 weeks * 7 days grid roughly
+                for(let i=0; i<365; i++) {
+                    const d = new Date();
+                    d.setDate(today.getDate() - (364 - i));
+                    const dateStr = d.toISOString().split('T')[0];
+                    const count = mapData[dateStr] || 0;
+                    
+                    let cls = 'heatmap-cell';
+                    if(count > 3600) cls += ' l4'; // > 1 hr
+                    else if(count > 1800) cls += ' l3'; // > 30m
+                    else if(count > 600) cls += ' l2'; // > 10m
+                    else if(count > 0) cls += ' l1'; // > 0
+                    
+                    html += `<div class="${cls}" title="${dateStr}: ${Math.round(count/60)}m"></div>`;
+                }
+                container.innerHTML = html;
+            },
+
+            renderDetail(subId) {
+                this.view = 'detail';
+                this.activeSubjectId = subId;
+                const sub = DB.data.subjects.find(s => s.id === subId);
+                const container = document.getElementById('main-content');
+                if(!sub) return this.renderHome();
+
+                container.innerHTML = `
+                    <div class="max-w-5xl mx-auto fade-in-up h-full flex flex-col">
+                        <div class="flex items-center gap-4 mb-6">
+                            <button onclick="App.renderHome()" class="p-3 bg-slate-800 rounded-xl hover:bg-slate-700"><i class="fas fa-arrow-left"></i></button>
+                            <div class="flex-1"><h2 class="text-2xl font-bold text-white">${sub.name}</h2><p class="text-xs text-slate-400">Detailed View</p></div>
+                            <div class="text-right bg-slate-800/50 px-4 py-2 rounded-xl border border-white/5"><div class="text-[10px] text-slate-400 uppercase tracking-wider">Progress</div><div class="text-xl font-bold text-indigo-400">${sub.progress}%</div></div>
+                        </div>
+
+                        <div class="flex p-1 bg-slate-800/50 rounded-xl mb-6 w-full md:w-fit border border-white/5">
+                            <button onclick="App.switchTab('chapters')" id="tab-chapters" class="px-6 py-2 rounded-lg text-sm font-medium transition-all text-white bg-indigo-600 shadow-lg">Chapters</button>
+                            <button onclick="App.switchTab('timer')" id="tab-timer" class="px-6 py-2 rounded-lg text-sm font-medium transition-all text-slate-400 hover:text-white">Timer</button>
+                            <button onclick="App.switchTab('analytics')" id="tab-analytics" class="px-6 py-2 rounded-lg text-sm font-medium transition-all text-slate-400 hover:text-white">Analytics</button>
+                        </div>
+
+                        <div id="tab-content" class="flex-1 overflow-y-auto custom-scrollbar pb-20"></div>
+                    </div>
+                `;
+                this.switchTab('chapters');
+            },
+
+            switchTab(tab) {
+                this.currentTab = tab;
+                this.checkMiniPlayer();
+                ['chapters','timer','analytics'].forEach(t => {
+                    const btn = document.getElementById(`tab-${t}`);
+                    if(btn) {
+                        if(t === tab) btn.className = "px-6 py-2 rounded-lg text-sm font-medium transition-all text-white bg-indigo-600 shadow-lg";
+                        else btn.className = "px-6 py-2 rounded-lg text-sm font-medium transition-all text-slate-400 hover:text-white hover:bg-white/5 transition-all";
+                    }
+                });
+
+                const content = document.getElementById('tab-content');
+                if(!content) return;
+                
+                if(tab === 'chapters') {
+                    const chaps = DB.data.chapters[this.activeSubjectId] || [];
+                    let html = `
+                        <div class="flex gap-2 mb-4">
+                            <input type="text" id="new-chap-name" class="glass-input flex-1 p-3 rounded-xl" placeholder="Chapter Name...">
+                            <button onclick="App.addInlineChapter()" class="bg-indigo-600 px-4 rounded-xl font-bold text-white hover:bg-indigo-500"><i class="fas fa-plus"></i></button>
+                        </div>
+                        <div class="space-y-2">
+                    `;
+                    if(chaps.length === 0) html += `<p class="text-center text-slate-500 mt-10">No chapters yet.</p>`;
+                    chaps.forEach(c => {
+                        const isBad = c.status === 'bad';
+                        const isGood = c.status === 'good';
+                        const isExc = c.status === 'excellent';
+                        
+                        html += `
+                            <div class="glass-panel p-4 rounded-xl flex justify-between items-center group cursor-pointer hover:bg-slate-800 transition-colors" onclick="App.openStatusModal('${c.id}', '${c.name.replace(/'/g, "\\'")}')">
+                                <span class="font-medium flex-1">${c.name}</span>
+                                <div class="flex gap-2 items-center">
+                                    <div class="w-3 h-3 rounded-full ${isBad?'bg-rose-500':'bg-slate-700'}"></div>
+                                    <div class="w-3 h-3 rounded-full ${isGood?'bg-amber-500':'bg-slate-700'}"></div>
+                                    <div class="w-3 h-3 rounded-full ${isExc?'bg-emerald-500':'bg-slate-700'}"></div>
+                                    <button onclick="event.stopPropagation(); App.deleteChapter('${c.id}')" class="ml-2 text-slate-600 hover:text-red-500 p-2"><i class="fas fa-trash"></i></button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    html += `</div>`;
+                    content.innerHTML = html;
+                } 
+                else if(tab === 'timer') {
+                    // Pomodoro UI
+                    content.innerHTML = `
+                        <div class="flex flex-col items-center justify-center h-[350px]">
+                            <!-- Mode Switcher -->
+                            <div class="flex bg-slate-800 p-1 rounded-xl mb-8">
+                                <button onclick="App.setTimerMode('stopwatch')" id="mode-stopwatch" class="px-4 py-1 rounded-lg text-sm font-bold ${!this.pomodoroMode ? 'bg-slate-600 text-white' : 'text-slate-400'}">Stopwatch</button>
+                                <button onclick="App.setTimerMode('pomodoro')" id="mode-pomodoro" class="px-4 py-1 rounded-lg text-sm font-bold ${this.pomodoroMode ? 'bg-indigo-600 text-white' : 'text-slate-400'}">Pomodoro</button>
+                            </div>
+
+                            <div id="main-timer-display" class="text-7xl font-mono font-bold text-white mb-8 drop-shadow-2xl transition-all duration-300">00:00:00</div>
+                            <div class="flex gap-4">
+                                <button id="btn-play" onclick="App.startTimer()" class="w-16 h-16 rounded-full bg-emerald-600 flex items-center justify-center text-2xl hover:scale-110 transition-transform shadow-lg"><i class="fas fa-play ml-1"></i></button>
+                                <button id="btn-pause" onclick="App.pauseTimer()" class="hidden w-16 h-16 rounded-full bg-amber-500 flex items-center justify-center text-2xl hover:scale-110 transition-transform shadow-lg"><i class="fas fa-pause"></i></button>
+                                <button id="btn-stop" onclick="App.stopTimer()" class="group relative w-16 h-16 rounded-full bg-rose-600 flex items-center justify-center text-2xl hover:scale-110 transition-transform shadow-lg"><i class="fas fa-stop"></i></button>
+                            </div>
+                            <p class="mt-8 text-slate-400 text-sm" id="timer-status-text">Focus Mode Active</p>
+                        </div>
+                    `;
+                    this.updateTimerUI();
+                    this.updateButtons();
+                }
+                else if(tab === 'analytics') {
+                    const daily = DB.getStats('daily', this.activeSubjectId);
+                    const weekly = DB.getStats('weekly', this.activeSubjectId);
+                    const monthly = DB.getStats('monthly', this.activeSubjectId);
+                    const history = DB.getHistory(this.activeSubjectId);
+                    const chaps = DB.data.chapters[this.activeSubjectId] || [];
+                    const counts = { excellent: 0, good: 0, bad: 0 };
+                    chaps.forEach(c => counts[c.status]++);
+
+                    let html = `
+                        <div class="grid grid-cols-3 gap-3 mb-6">
+                            <div class="glass-panel p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 text-center"><div class="text-emerald-400 text-[10px] font-bold uppercase tracking-wider">Today</div><div class="text-xl font-bold text-white">${this.formatTime(daily)}</div></div>
+                            <div class="glass-panel p-4 rounded-xl border border-amber-500/20 bg-amber-500/5 text-center"><div class="text-amber-400 text-[10px] font-bold uppercase tracking-wider">Week</div><div class="text-xl font-bold text-white">${this.formatTime(weekly)}</div></div>
+                            <div class="glass-panel p-4 rounded-xl border border-indigo-500/20 bg-indigo-500/5 text-center"><div class="text-indigo-400 text-[10px] font-bold uppercase tracking-wider">Month</div><div class="text-xl font-bold text-white">${this.formatTime(monthly)}</div></div>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                            <div class="glass-panel p-6 rounded-2xl border border-white/5"><h3 class="text-sm font-bold uppercase text-slate-400 mb-6 flex items-center gap-2"><i class="fas fa-chart-pie"></i> Ratio</h3><div class="h-64 relative"><canvas id="chart-doughnut"></canvas></div></div>
+                            <div class="glass-panel p-6 rounded-2xl border border-white/5"><h3 class="text-sm font-bold uppercase text-slate-400 mb-4">History</h3><div class="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
+                    `;
+                    
+                    if(history.length === 0) {
+                        html += `<div class="p-4 text-center text-slate-500 text-sm bg-slate-800/50 rounded-xl">No study sessions recorded yet.</div>`;
+                    } else {
+                        history.forEach(h => {
+                            html += `
+                                <div class="glass-panel p-3 rounded-xl flex justify-between items-center">
+                                    <div>
+                                        <div class="text-sm font-bold text-white">${h.fullDate.split(',')[0]}</div>
+                                        <div class="text-xs text-slate-400">${h.fullDate.split(',')[1]}</div>
+                                    </div>
+                                    <div class="text-emerald-400 font-bold bg-emerald-400/10 px-3 py-1 rounded-lg">
+                                        ${this.formatTime(h.duration)}
+                                    </div>
+                                </div>
+                            `;
+                        });
+                    }
+                    html += `</div></div></div></div>`;
+                    content.innerHTML = html;
+                    
+                    setTimeout(() => {
+                        const ctx = document.getElementById('chart-doughnut');
+                        if(ctx) new Chart(ctx, { type: 'doughnut', data: { labels: ['Done', 'Learn', 'Todo'], datasets: [{ data: [counts.excellent, counts.good, counts.bad], backgroundColor: ['#10b981', '#f59e0b', '#f43f5e'], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8' } } } } });
+                    }, 50);
+                }
+            },
+
+            // --- FIXED TIMER LOGIC ---
+            setTimerMode(mode) {
+                if(this.isTimerRunning) {
+                    if(!confirm("Timer is running. Stop current session?")) return;
+                    this.stopTimer();
+                }
+                this.pomodoroMode = (mode === 'pomodoro');
+                // Reset state
+                this.elapsedTime = 0;
+                this.startTime = null;
+                
+                // Update UI immediately
+                this.switchTab('timer');
+            },
+
+            startTimer() {
+                if(this.isTimerRunning) return;
+                this.isTimerRunning = true;
+                this.startTime = Date.now();
+                this.vibrate(50);
+                
+                if(this.timerInterval) clearInterval(this.timerInterval);
+                this.timerInterval = setInterval(() => {
+                    this.updateTimerUI();
+                    
+                    // Pomodoro Check
+                    if(this.pomodoroMode) {
+                        const current = Math.floor((Date.now() - this.startTime) / 1000) + this.elapsedTime;
+                        const remaining = this.pomodoroTime - current;
+                        
+                        if(remaining <= 0) {
+                            this.vibrate([200, 100, 200]);
+                            this.stopTimer(); // Auto stop at 25 mins
+                            this.showToast("Pomodoro Complete! Take a break.", "success");
+                            this.triggerConfetti();
+                        }
+                    }
+                }, 1000);
+                
+                this.updateButtons();
+                this.checkMiniPlayer();
+            },
+            pauseTimer() {
+                if(!this.isTimerRunning) return;
+                this.isTimerRunning = false;
+                this.elapsedTime += Math.floor((Date.now() - this.startTime) / 1000);
+                clearInterval(this.timerInterval);
+                this.updateButtons();
+                this.checkMiniPlayer();
+            },
+            stopTimer() {
+                this.isTimerRunning = false;
+                clearInterval(this.timerInterval);
+                let total = this.elapsedTime;
+                if(this.startTime && document.getElementById('btn-pause') && !document.getElementById('btn-pause').classList.contains('hidden')) {
+                    total += Math.floor((Date.now() - this.startTime) / 1000);
+                }
+
+                if(total > 5) { // Minimum 5 seconds to log
+                    DB.logSession(this.activeSubjectId, total);
+                    this.showToast(`Session Saved: ${this.formatTime(total)}`, "success");
+                    
+                    // Reset
+                    this.elapsedTime = 0;
+                    this.startTime = null;
+                    
+                    if(this.currentTab === 'timer') {
+                        document.getElementById('main-timer-display').innerText="00:00:00";
+                    }
+                    document.getElementById('mini-timer-display').innerText = "00:00:00";
+                    if(this.currentTab === 'analytics') this.switchTab('analytics');
+                } else {
+                    this.elapsedTime = 0;
+                    this.startTime = null;
+                    if(this.currentTab === 'timer') this.updateTimerUI();
+                }
+                this.updateButtons();
+                this.checkMiniPlayer();
+            },
+            updateTimerUI() {
+                let current = 0;
+                if(this.isTimerRunning) {
+                    current = Math.floor((Date.now() - this.startTime) / 1000);
+                }
+                const total = this.elapsedTime + current;
+                let displayTime = total;
+
+                // If Pomodoro, show remaining time
+                if(this.pomodoroMode) {
+                    displayTime = this.pomodoroTime - total;
+                    if(displayTime < 0) displayTime = 0;
+                }
+                
+                const h = String(Math.floor(displayTime / 3600)).padStart(2, '0');
+                const m = String(Math.floor((displayTime % 3600) / 60)).padStart(2, '0');
+                const s = String(Math.floor(displayTime % 60)).padStart(2, '0');
+                const str = this.pomodoroMode && h==='00' ? `${m}:${s}` : `${h}:${m}:${s}`;
+                
+                const mainDisplay = document.getElementById('main-timer-display');
+                if(mainDisplay) mainDisplay.innerText = str;
+                document.getElementById('mini-timer-display').innerText = str;
+                document.getElementById('mini-timer-label').innerText = this.pomodoroMode ? 'Pomodoro' : 'Focus Mode';
+            },
+            updateButtons() {
+                const play = document.getElementById('btn-play'), pause = document.getElementById('btn-pause');
+                const mPlay = document.getElementById('mini-btn-play'), mPause = document.getElementById('mini-btn-pause');
+                if(this.isTimerRunning) {
+                    if(play) { play.classList.add('hidden'); pause.classList.remove('hidden'); }
+                    if(mPlay) { mPlay.classList.add('hidden'); mPause.classList.remove('hidden'); }
+                } else {
+                    if(play) { play.classList.remove('hidden'); pause.classList.add('hidden'); }
+                    if(mPlay) { mPlay.classList.remove('hidden'); mPause.classList.add('hidden'); }
+                }
+            },
+            checkMiniPlayer() {
+                const mini = document.getElementById('mini-timer');
+                const active = this.elapsedTime > 0 || this.isTimerRunning;
+                if(active && this.currentTab !== 'timer') mini.classList.remove('hidden');
+                else mini.classList.add('hidden');
+            },
+
+            // --- HELPERS ---
+            addInlineChapter() { 
+                const n = document.getElementById('new-chap-name').value; 
+                if(n && n.trim() !== "") { DB.addChapter(this.activeSubjectId, n); this.switchTab('chapters'); } 
+            },
+            addManualChapter() { const n = document.getElementById('inp-chapter-name').value; if(n) { this.pendingChapters.push(n); this.renderPendingChapters(); document.getElementById('inp-chapter-name').value=''; } },
+            renderPendingChapters() {
+                const list = document.getElementById('chapter-edit-list');
+                list.innerHTML = this.pendingChapters.map((n, i) => `<div class="flex items-center gap-3 bg-slate-800 p-3 rounded-lg mt-2"><i class="fas fa-circle text-[6px] text-indigo-500"></i><span class="flex-1 text-sm">${n}</span><button onclick="App.pendingChapters.splice(${i},1); App.renderPendingChapters()" class="text-red-400"><i class="fas fa-times"></i></button></div>`).join('');
+            },
+            saveChaptersBatch() { this.pendingChapters.forEach(n => { if(n.trim()) DB.addChapter(this.activeSubjectId, n); }); this.pendingChapters=[]; this.closeModal('chapter-modal'); this.switchTab('chapters'); },
+            async processOCR(input) {
+                const f = input.files[0]; if(!f) return;
+                document.getElementById('ocr-loading').classList.remove('hidden');
+                try {
+                    const { data: { text } } = await Tesseract.recognize(f, 'eng');
+                    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 3);
+                    this.pendingChapters = [...this.pendingChapters, ...lines];
+                    this.renderPendingChapters();
+                } catch(e) { this.showToast('OCR Error', 'error'); } finally { document.getElementById('ocr-loading').classList.add('hidden'); input.value=''; }
+            },
+            deleteChapter(id) { if(confirm("Delete chapter?")) { DB.deleteChapter(this.activeSubjectId, id); this.switchTab('chapters'); } },
+            openStatusModal(id, name) { 
+                this.activeChapterId = id; 
+                document.getElementById('status-modal-title').innerHTML = `Update: <span class="text-indigo-400">${name}</span>`; 
+                this.openModal('status-modal'); 
+            },
+            updateChapterStatus(s) { DB.updateChapter(this.activeSubjectId, this.activeChapterId, s); this.closeModal('status-modal'); this.switchTab('chapters'); },
+            createSubject() { const n = document.getElementById('inp-subject-name').value; if(n) { DB.addSubject(n); this.closeModal('add-subject-modal'); this.renderHome(); } },
+            deleteSubject(id) { if(confirm("Delete subject and history?")) { DB.deleteSubject(id); this.renderHome(); } },
+            openModal(id) { 
+                if(id==='add-subject-modal') document.getElementById('inp-subject-name').value = '';
+                if(id==='chapter-modal') { document.getElementById('inp-chapter-name').value = ''; this.pendingChapters = []; this.renderPendingChapters(); }
+                document.getElementById(id).classList.remove('hidden'); 
+            },
+            closeModal(id) { document.getElementById(id).classList.add('hidden'); },
+            
+            initThreeJS() {
+                const c = document.getElementById('bg-canvas');
+                const s = new THREE.Scene();
+                const cam = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+                const r = new THREE.WebGLRenderer({canvas:c, alpha:true});
+                r.setSize(window.innerWidth, window.innerHeight);
+                const g = new THREE.IcosahedronGeometry(1,0);
+                const m = new THREE.MeshBasicMaterial({color:0x6366f1, wireframe:true, opacity:0.05, transparent:true});
+                const shapes=[];
+                for(let i=0;i<8;i++) { const mesh=new THREE.Mesh(g,m); mesh.position.set((Math.random()-0.5)*15,(Math.random()-0.5)*15,(Math.random()-0.5)*10); s.add(mesh); shapes.push({m:mesh,s:Math.random()*0.002}); }
+                cam.position.z=8;
+                function anim(){ requestAnimationFrame(anim); shapes.forEach(i=>{i.m.rotation.x+=i.s;i.m.rotation.y+=i.s}); r.render(s,cam); }
+                anim();
+            }
+        };
+
+        if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ()=>App.init());
+        else App.init();
+    </script>
+</body>
+</html>
+
+
