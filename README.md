@@ -36,7 +36,7 @@
 
 ## 👤 डेवलपर (Developer)
 
-**Rahul Mourya** *Full Stack Developer & Accountant* 📧 Email: Mouryarahul248@gmail.com
+**Rahul Mourya** *Full Stack Developer & Accountant* 📧 Email: rahul.mo2410@gmail.com
 
 ---
 *© 2025 StudySync Pro. All Rights Reserved.*
